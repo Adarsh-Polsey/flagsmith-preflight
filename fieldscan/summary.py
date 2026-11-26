@@ -3,7 +3,7 @@
 import json
 import sys
 
-ORDER = ["exposure recorded", "stable identifier", "identified first", "event name", "same identifier",
+ORDER = ["stable identifier", "identified first", "event name", "same identifier",
          "events enabled", "events flushed", "SDK version"]
 
 
