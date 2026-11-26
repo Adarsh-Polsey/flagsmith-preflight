@@ -1,6 +1,7 @@
 import argparse
 import json
 import re
+import shutil
 import sys
 import time
 import uuid
@@ -300,11 +301,14 @@ def cmd_approvals(args) -> int:
     if not path.exists():
         print("No approvals yet.")
         return 0
+    width = shutil.get_terminal_size((160, 40)).columns
     for line in path.read_text().splitlines():
         e = json.loads(line)
         at = datetime.fromisoformat(e["at"]).strftime("%a %H:%M")
         mark = paint("y", "32") if e["answer"] == "y" else paint("n", "31")
-        print(f"{at}  {mark}  {e['who']:<14} {e['stage']:<8} {e['action']}  {paint('(' + e['via'] + ')', '2')}")
+        room = width - 46
+        action = e["action"] if len(e["action"]) <= room else e["action"][: room - 1] + "…"
+        print(f"{at}  {mark}  {e['who']:<14} {e['stage']:<8} {action:<{room}} {paint(e['via'], '2')}")
     return 0
 
 
