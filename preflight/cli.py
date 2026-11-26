@@ -168,6 +168,10 @@ def wait_for(ctx: Context, exp_id: int, timeout: int) -> dict | None:
 
 def refresh_results(ctx: Context, exp: dict, timeout: int) -> dict | None:
     wait = ctx.admin.refresh(exp["id"], "results")
+    if wait and wait <= 90:
+        print(f"Flagsmith allows one refresh every 5 minutes; waiting {wait} s for the window.")
+        time.sleep(wait + 2)
+        wait = ctx.admin.refresh(exp["id"], "results")
     ctx.admin.refresh(exp["id"], "exposures")
     if wait:
         print(f"Results were refreshed under 5 minutes ago (Flagsmith's limit); next refresh in {wait // 60}m {wait % 60}s. Showing the last results.\n")
@@ -181,7 +185,9 @@ def show_readout(ctx: Context, exp: dict, results: dict | None):
         return None
     as_of = parse_time(results["as_of"]).astimezone().strftime("%a %H:%M")
     print(paint(f"{exp['name']} · {exp['status']} · results as of {as_of}", "1"))
-    r = analyse(results, ctx.admin.exposures(exp["id"]), exp, ctx.state.get("mde"))
+    mde, baseline = ctx.state.get("mde"), ctx.state.get("baseline")
+    planned = users_per_variation(baseline, mde) if mde and baseline else None
+    r = analyse(results, ctx.admin.exposures(exp["id"]), exp, mde, planned)
     for line in r.lines:
         if line.startswith("Verdict"):
             line = paint(line, "32;1" if r.callable else "33;1")

@@ -11,7 +11,7 @@ def check_warehouse(admin: Admin) -> Result:
     connected = [w for w in connections if w["status"] == "connected"]
     if connected:
         w = connected[0]
-        return setup("warehouse connected", PASS, f"{w['name']} warehouse is connected ({w.get('total_events_received', 0)} events received)")
+        return setup("warehouse connected", PASS, f"{w['name']} warehouse is connected ({w.get('total_events_received', 0):,} events received)")
     if connections:
         status = connections[0]["status"].replace("_", " ")
         return setup("warehouse connected", FAIL, f"warehouse is {status}: events are rejected until it's connected (Environment Settings › Warehouse › Send your first event)")

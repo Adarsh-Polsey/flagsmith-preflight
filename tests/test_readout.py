@@ -26,6 +26,12 @@ def test_interval_above_zero_names_the_winner():
     assert r.callable and r.winner == "early_access" and r.winner_id == 11
 
 
+def test_early_call_below_plan_is_flagged():
+    r = analyse(results(inference=inference(1.29, 0.001, 2.58, 0.98)), None, EXPERIMENT, planned=1800)
+    assert r.callable
+    assert any("below the planned 1,800" in line for line in r.lines)
+
+
 def test_interval_below_zero_names_control():
     r = analyse(results(inference=inference(-0.3, -0.5, -0.1, 0.01)), None, EXPERIMENT)
     assert r.callable and r.winner == "control" and r.winner_id is None

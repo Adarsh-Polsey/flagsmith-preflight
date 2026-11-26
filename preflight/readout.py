@@ -41,7 +41,7 @@ def pct(x: float, sign: bool = True) -> str:
     return f"{x * 100:+.1f}%" if sign else f"{x * 100:.1f}%"
 
 
-def analyse(results: dict, exposures: dict | None, experiment: dict, mde: float | None = None) -> Readout:
+def analyse(results: dict, exposures: dict | None, experiment: dict, mde: float | None = None, planned: int | None = None) -> Readout:
     out = Readout()
     payload = results.get("payload") or {}
     options = {o["key"]: o["id"] for o in experiment["feature"]["multivariate_options"] if o.get("key")}
@@ -84,6 +84,9 @@ def analyse(results: dict, exposures: dict | None, experiment: dict, mde: float 
         out.callable, out.winner, out.winner_id = True, key, options.get(key)
         inf = winners[key]
         out.lines.append(f"Verdict: {key} wins. Its 95% interval ({pct(inf['ci_low'])} to {pct(inf['ci_high'])}) is above zero.")
+        smallest = min(v["n"] for v in variants.values())
+        if planned and smallest < planned:
+            out.lines.append(f"  Called below the planned {round_users(planned)} users per variation: early leads often shrink, so expect the true lift nearer the interval's low end.")
         return out
     if treatments and all(inf and inf["ci_high"] < 0 for inf in treatments.values()) and not out.srm:
         out.callable, out.winner, out.winner_id = True, "control", None
