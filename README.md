@@ -43,7 +43,7 @@ Run once, end to end, on Flagsmith Cloud on Thu Nov 26 against the demo app. Tra
 | 2 | Preflight | **gate** | `preflight check`: setup and code checks, each with `file:line` and a one-line reason. |
 | 3 | Approve | proposal | The agent explains each failure, writes the smallest fix, shows the diff and waits for a yes. Then it re-runs the check. |
 | 4 | Run | **gate** | `preflight start` refuses while any check fails, then asks `Start <experiment>? This locks <flag>. [y/N]`. |
-| 5 | Evaluate | **gate** | `preflight readout` refreshes the results and names a winner only when its 95% credible interval excludes zero. Otherwise: "not callable yet", the interval, and roughly how many more users it needs. |
+| 5 | Evaluate | **gate** | `preflight readout` refreshes the results and names a winner only when its 95% credible interval excludes zero and no guardrail moved the wrong way. Otherwise: "not callable yet", the interval, and roughly how many more users it needs. |
 | 6 | Ship | **gate** | `preflight ship` works only after a callable result. On a yes it ends the experiment and serves the winner to everyone through Flagsmith, with no redeploy. |
 | 7 | Clean up | proposal | A diff that removes the experiment call and the losing branch, plus archiving the flag. `preflight archive` refuses while code still reads the flag. |
 
@@ -162,7 +162,7 @@ No keys live in the repo: `flagsmith.json`, `.env` and keys are gitignored, and 
 
 - The code checks are static heuristics. Identifiers that come from another module or a function parameter get a warning, not a verdict. JS/TS is parsed with a tokenizer, not a type checker. Java, Go and Flutter aren't scanned.
 - The smoke check needs a running experiment (Flagsmith only records exposures then), so its visitors count in the results. Run it on a staging environment, or right after start.
-- The readout uses the experiment's first metric. Guardrail metrics aren't evaluated.
+- The readout judges the experiment's first metric. Guardrails ("should not decrease/increase" metrics, e.g. `create --guardrail-event page_view`) block a winner only when their interval sits wholly on the wrong side.
 - "More users needed" scales the current interval by the square root of the sample; it's a rough guide, not a power analysis.
 - `create` makes string flags, splits evenly and rolls out to 100%.
 - The approvals log is a local append-only file, not tamper-proof.

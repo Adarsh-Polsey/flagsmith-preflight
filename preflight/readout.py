@@ -2,6 +2,7 @@ import math
 from dataclasses import dataclass, field
 
 SRM_THRESHOLD = 0.001  # Flagsmith warns when the observed split is a one-in-a-thousand event
+WRONG_WAY = {"not_decrease": lambda inf: inf["ci_high"] < 0, "not_increase": lambda inf: inf["ci_low"] > 0}
 Z95, Z80 = 1.959964, 0.841621
 
 
@@ -41,6 +42,26 @@ def pct(x: float, sign: bool = True) -> str:
     return f"{x * 100:+.1f}%" if sign else f"{x * 100:.1f}%"
 
 
+def guardrails(payload: dict, experiment: dict, out: Readout) -> set[str]:
+    # Every metric after the primary one. "Should not decrease/increase" metrics are guardrails:
+    # one whose interval sits wholly on the wrong side blocks that variation.
+    by_id = {m["metric_id"]: m for m in payload.get("metrics", [])}
+    harmed = set()
+    for em in experiment["metrics"][1:]:
+        m = by_id.get(em["metric"])
+        direction = em.get("expected_direction", "")
+        label = "Guardrail" if direction.startswith("not_") else "Also tracked"
+        for key, inf in ((m or {}).get("inference") or {}).items():
+            if not inf:
+                out.lines.append(f"{label} {em['metric_name']!r} · {key}: collecting data")
+                continue
+            wrong = WRONG_WAY.get(direction, lambda i: False)(inf)
+            harmed |= {key} if wrong else set()
+            note = "moved the wrong way" if wrong else "ok"
+            out.lines.append(f"{label} {em['metric_name']!r} ({direction.replace('_', ' ')}) · {key}: lift {pct(inf['lift'])}, 95% CI {pct(inf['ci_low'])} to {pct(inf['ci_high'])} · {note}")
+    return harmed
+
+
 def analyse(results: dict, exposures: dict | None, experiment: dict, mde: float | None = None, planned: int | None = None) -> Readout:
     out = Readout()
     payload = results.get("payload") or {}
@@ -77,8 +98,13 @@ def analyse(results: dict, exposures: dict | None, experiment: dict, mde: float 
                 row += "  collecting data (Flagsmith needs 50 users and 5 conversions per variation)"
         out.lines.append(row)
 
+    harmed = guardrails(payload, experiment, out)
     treatments = {k: inf for k, inf in inference.items() if k != "control"}
     winners = {k: inf for k, inf in treatments.items() if inf and inf["ci_low"] > 0}
+    if winners and not out.srm and set(winners) <= harmed:
+        out.lines.append(f"Verdict: not shippable. {', '.join(sorted(winners))} wins on {primary['metric_name']!r} but a guardrail moved the wrong way.")
+        return out
+    winners = {k: inf for k, inf in winners.items() if k not in harmed}
     if winners and not out.srm:
         key = max(winners, key=lambda k: winners[k]["lift"])
         out.callable, out.winner, out.winner_id = True, key, options.get(key)

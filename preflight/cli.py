@@ -95,6 +95,7 @@ def cmd_create(args) -> int:
     plan = [
         f"reuse flag '{args.flag}'" if feature else f"create multivariate flag '{args.flag}': control {args.control!r}, " + ", ".join(f"{k} {v!r}" for k, v in variants.items()),
         f"metric {args.metric!r} counting event {args.event!r} (occurrence, higher is better)",
+        *([f"guardrail {args.guardrail_metric!r} counting event {args.guardrail_event!r} (should not decrease)"] if args.guardrail_event else []),
         f"experiment {args.name!r}, split evenly, not started",
     ]
     print("This creates in Flagsmith:\n" + "\n".join(f"  - {p}" for p in plan))
@@ -103,15 +104,20 @@ def cmd_create(args) -> int:
         return 1
     if not feature:
         feature = ctx.admin.create_flag(args.flag, args.control, variants)
-    metric = next((m for m in ctx.admin.metrics() if m["definition"].get("event") == args.event), None)
-    metric = metric or ctx.admin.create_metric(args.metric, args.event)
+    def metric_for(event: str, name: str) -> dict:
+        existing = next((m for m in ctx.admin.metrics() if m["definition"].get("event") == event), None)
+        return existing or ctx.admin.create_metric(name, event)
+
+    metrics = [(metric_for(args.event, args.metric)["id"], "increase")]
+    if args.guardrail_event:
+        metrics.append((metric_for(args.guardrail_event, args.guardrail_metric or args.guardrail_event)["id"], "not_decrease"))
     share = round(100 / (len(feature["variants"]) + 1), 2)
     split = {v["id"]: share for v in feature["variants"]}
-    exp = ctx.admin.create_experiment(feature, args.name, args.hypothesis, metric["id"], split)
+    exp = ctx.admin.create_experiment(feature, args.name, args.hypothesis, metrics, split)
     data = state.load(root)
     data.update(flag=args.flag, experiment=exp["id"])
     state.save(root, data)
-    print(f"✓ flag '{args.flag}', metric {metric['id']}, experiment {exp['id']} ({exp['status']}). Next: preflight check")
+    print(f"✓ flag '{args.flag}', metrics {', '.join(str(m) for m, _ in metrics)}, experiment {exp['id']} ({exp['status']}). Next: preflight check")
     return 0
 
 
@@ -355,6 +361,8 @@ def main(argv=None) -> int:
     for name in ("flag", "control", "event", "metric", "name", "hypothesis"):
         s.add_argument(f"--{name}", required=True)
     s.add_argument("--variant", action="append", required=True, help="key=value, repeatable")
+    s.add_argument("--guardrail-event", help="an event that shouldn't drop, e.g. page_view")
+    s.add_argument("--guardrail-metric", help="its metric name")
     approval(s)
     s.set_defaults(fn=cmd_create)
 

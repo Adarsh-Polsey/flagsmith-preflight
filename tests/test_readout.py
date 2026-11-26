@@ -75,3 +75,29 @@ def test_smoke_catches_double_counting_one_sided_and_flat_conversions():
     after = {"control": {"n": 200, "sum": 0}}
     r = {x.check: x.status for x in judge({}, after, ["control", "early_access"], 100, 1.0)}
     assert r == {"both sides exposed": "fail", "conversions arrive": "fail", "one identity per visitor": "fail"}
+
+
+def with_guardrail(guard_inf, direction="not_decrease"):
+    exp = {**EXPERIMENT, "metrics": [*EXPERIMENT["metrics"], {"metric": 6, "metric_name": "Page views", "expected_direction": direction}]}
+    res = results(control=(1000, 100), treatment=(1000, 140), inference=inference(0.4, 0.12, 0.68, 0.998))
+    res["payload"]["metrics"].append({"metric_id": 6, "variants": {}, "inference": {"early_access": guard_inf}})
+    return res, exp
+
+
+def test_guardrail_that_held_is_reported_and_the_winner_stands():
+    res, exp = with_guardrail(inference(-0.02, -0.08, 0.04, 0.3))
+    r = analyse(res, None, exp)
+    assert r.callable and r.winner == "early_access"
+    assert any(line.startswith("Guardrail 'Page views'") and line.endswith("ok") for line in r.lines)
+
+
+def test_guardrail_moved_the_wrong_way_blocks_the_winner():
+    res, exp = with_guardrail(inference(-0.2, -0.3, -0.1, 0.001))
+    r = analyse(res, None, exp)
+    assert not r.callable
+    assert any("not shippable" in line for line in r.lines)
+
+
+def test_should_not_increase_guardrail():
+    res, exp = with_guardrail(inference(0.25, 0.1, 0.4, 0.99), direction="not_increase")
+    assert not analyse(res, None, exp).callable

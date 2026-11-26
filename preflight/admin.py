@@ -107,12 +107,12 @@ class Admin:
         body = {"name": name, "aggregation": "occurrence", "direction": "up", "definition": {"version": 1, "event": event}}
         return self.api(self.env("experiment-metrics/"), "POST", body)
 
-    def create_experiment(self, feature: dict, name: str, hypothesis: str, metric_id: int, split: dict[int, float]) -> dict:
+    def create_experiment(self, feature: dict, name: str, hypothesis: str, metrics: list[tuple[int, str]], split: dict[int, float]) -> dict:
         body = {
             "feature": feature["id"],
             "name": name,
             "hypothesis": hypothesis,
-            "metrics": [{"metric": metric_id, "expected_direction": "increase"}],
+            "metrics": [{"metric": mid, "expected_direction": direction} for mid, direction in metrics],
             "experiment_rollout": {
                 "enabled": True,
                 "rollout_percentage": 100,
