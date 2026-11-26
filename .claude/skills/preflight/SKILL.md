@@ -26,6 +26,7 @@ Stages 2, 4, 5 and 6 are gates in the CLI. Stages 1, 3 and 7 are your proposals.
 From a one-line ask like "test 'Get early access' against 'Join the waitlist' on the signup button":
 - Find where the thing is rendered and where success happens in the code. The current version is control.
 - Pick one success event (lowercase snake_case, e.g. `signup`). If the code already sends a similar event, say so.
+- If the app already sends an event that shouldn't move (e.g. `page_view`), propose it as a guardrail; otherwise say there's none.
 - Ask for the baseline conversion rate and the smallest lift worth detecting if you don't know them; otherwise assume 10% and +30% and say it's an assumption.
 - Run `preflight estimate --baseline <b> --lift <l>`.
 - Check what exists: `flagsmith feature get <flag> --json` and `flagsmith api api/v1/environments/<env>/experiment-metrics/`.
@@ -37,6 +38,7 @@ Ask: <the one line>
 Hypothesis: <change> will raise <metric> by at least <lift> within <time>.
 Flag: <flag> (multivariate) · control <value> · <key> <value>
 Success event: <event> (metric "<name>", occurrence, higher is better)
+Guardrail: <event> (should not decrease), or none
 Split: 50/50 · rollout 100%
 Sample: ~<n> users per variation for a <lift> lift on a <baseline> baseline
 Flagsmith changes: <what will be created, what is reused>
@@ -45,7 +47,7 @@ Not changed yet: the code. `preflight check` runs next.
 
 - Show the plan, ask "Create these in Flagsmith? (yes/no)". On yes:
   `preflight init --flag <flag> --baseline <b> --mde <l>` then
-  `preflight create --flag <flag> --control "<value>" --variant "<key>=<value>" --event <event> --metric "<name>" --name "<experiment>" --hypothesis "<hypothesis>" --yes --note "<reply>"`.
+  `preflight create --flag <flag> --control "<value>" --variant "<key>=<value>" --event <event> --metric "<name>" --name "<experiment>" --hypothesis "<hypothesis>" [--guardrail-event <event> --guardrail-metric "<name>"] --yes --note "<reply>"`.
   It creates the experiment but never starts it.
 
 ### 2. Preflight (gate)
