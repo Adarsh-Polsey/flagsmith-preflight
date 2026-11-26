@@ -12,3 +12,4 @@ build/
 dist/
 .DS_Store
 flagsmith.json
+.claude/settings.local.json

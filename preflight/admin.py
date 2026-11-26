@@ -126,7 +126,12 @@ class Admin:
         return self.feature(name)
 
     def set_variant_key(self, flag: str, variant_id: int, key: str) -> None:
-        self.run(["feature", "variant", "update", flag, str(variant_id), "--key", key])
+        # Flagsmith's mv-option update needs the whole option: a key-only PATCH
+        # (what `flagsmith feature variant update --key` sends) returns 500.
+        path = f"api/v1/projects/{self.project}/features/{self.feature(flag)['id']}/mv-options/{variant_id}/"
+        option = self.api(path)
+        fields = ("feature", "type", "string_value", "integer_value", "boolean_value", "default_percentage_allocation")
+        self.api(path, "PUT", {**{k: option[k] for k in fields}, "key": key})
 
     def archive(self, flag: str) -> None:
         self.run(["feature", "update", flag, "--archive"])

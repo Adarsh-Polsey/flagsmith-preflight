@@ -374,6 +374,7 @@ def main(argv=None) -> int:
     s.set_defaults(fn=cmd_approvals)
 
     args = p.parse_args(argv)
+    sys.stdout.reconfigure(line_buffering=True)
     try:
         return args.fn(args)
     except FlagsmithError as e:
