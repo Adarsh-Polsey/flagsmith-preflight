@@ -204,8 +204,12 @@ def scan_js(raw: str, rel: str) -> FileFacts | None:
     server = any(p.startswith(("@flagsmith/nodejs", "flagsmith-nodejs")) for p in packages)
     js = JsFile(src)
     facts = FileFacts(rel, "js")
-    identify: Ident | None = None
-    identify_line = 0
+    identifies = []
+    for m in CALL_RE.finditer(src):
+        if m.group(2) == "identify" and (packages or "flagsmith" in (m.group(1) or "").lower()):
+            args, _ = split_args(src, m.end())
+            if args:
+                identifies.append((line_of(src, m.start()), js.classify(args[0])))
 
     for m in CALL_RE.finditer(src):
         recv, name = m.group(1) or "", m.group(2)
@@ -214,9 +218,7 @@ def scan_js(raw: str, rel: str) -> FileFacts | None:
             continue
         args, _ = split_args(src, m.end())
         line = line_of(src, m.start())
-        if name == "identify" and args:
-            identify, identify_line = js.classify(args[0]), line
-        elif name in ("getExperimentFlag", "useExperiment", "trackExposureEvent"):
+        if name in ("getExperimentFlag", "useExperiment", "trackExposureEvent"):
             if name == "useExperiment" and not packages:
                 continue
             flag = string_value(args[0]) if args else None
@@ -226,7 +228,7 @@ def scan_js(raw: str, rel: str) -> FileFacts | None:
             elif name == "trackExposureEvent" and len(args) > 1 and object_field(args[1], "identifier"):
                 ident = js.classify(object_field(args[1], "identifier"))
             else:
-                ident = browser_identity(js, src, m.start(), identify, identify_line)
+                ident = browser_identity(js, src, line, identifies)
             facts.calls.append(Call("exposure", rel, line, "js", flag=flag, ident=ident, note=name))
         elif name == "trackEvent":
             event = string_value(args[0]) if args else None
@@ -234,13 +236,14 @@ def scan_js(raw: str, rel: str) -> FileFacts | None:
             if server or field:
                 ident = js.classify(field)
             else:
-                ident = browser_identity(js, src, m.start(), identify, identify_line)
+                ident = browser_identity(js, src, line, identifies)
             facts.calls.append(Call("conversion", rel, line, "js", event=event, ident=ident))
         elif name == "init" and args:
             facts.calls.append(Call("init", rel, line, "js", events_enabled=events_on(args[0])))
             ident_text = object_field(args[0], "identity")
             if ident_text:
-                identify, identify_line = js.classify(ident_text), line
+                identifies.append((line, js.classify(ident_text)))
+                identifies.sort(key=lambda x: x[0])
         elif name in ("flushEvents", "close"):
             facts.flushes = True
 
@@ -262,14 +265,15 @@ def scan_js(raw: str, rel: str) -> FileFacts | None:
     return facts
 
 
-def browser_identity(js: JsFile, src: str, at: int, identify: Ident | None, identify_line: int) -> Ident:
+def browser_identity(js: JsFile, src: str, line: int, identifies: list) -> Ident:
+    before = [ident for at, ident in identifies if at <= line]
+    if before:
+        return before[-1]
     provider = re.search(r"identity\s*:\s*([^,}\n]+)", src)
-    if identify is not None and identify_line <= line_of(src, at):
-        return identify
     if provider:
         return js.classify(provider.group(1))
-    if identify is not None:
-        return Ident(MISSING, f"identify() runs at line {identify_line}, after the flag is read")
+    if identifies:
+        return Ident(MISSING, f"identify() runs at line {identifies[0][0]}, after the flag is read")
     return Ident(UNKNOWN, "no identify() in this file: check the user is identified before the flag is read", frozenset({"browser-identity"}))
 
 

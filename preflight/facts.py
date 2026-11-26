@@ -5,9 +5,9 @@ STABLE, RANDOM, UNKNOWN, MISSING, CONSTANT = "stable", "random", "unknown", "mis
 # Words that mark an identifier as tied to a person or browser rather than a request.
 STABLE_WORDS = (
     "cookie", "session", "user", "uid", "visitor", "account", "customer",
-    "member", "device", "anon", "client_id", "clientid", "identity", "email", "login",
+    "member", "device", "anon", "clientid", "identity", "email", "login",
 )
-PER_REQUEST_WORDS = ("request_id", "requestid", "trace_id", "traceid", "correlation")
+PER_REQUEST_WORDS = ("requestid", "traceid", "correlation", "nonce")
 
 
 @dataclass(frozen=True)
@@ -39,12 +39,9 @@ class FileFacts:
     short_lived_line: int = 0
     flushes: bool = False
 
-    def of(self, kind: str) -> list[Call]:
-        return [c for c in self.calls if c.kind == kind]
-
 
 def hint(text: str) -> str | None:
-    low = text.lower()
+    low = text.lower().replace("_", "").replace("-", "")
     if any(w in low for w in PER_REQUEST_WORDS):
         return RANDOM
     if any(w in low for w in STABLE_WORDS):
