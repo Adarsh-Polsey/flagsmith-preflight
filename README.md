@@ -180,4 +180,4 @@ demo/           signup app with four planted bugs, seed.sh, simulate.py (SIMULAT
 fieldscan/      the read-only field scan (aggregates only)
 ```
 
-Run the tests with `pip install -e '.[dev]' && pytest`.
+Run the tests with `pip install -e '.[dev]' && pytest`. In CI, `preflight check --code-only --flag <flag> --event <event>` runs the code checks without Flagsmith credentials.
