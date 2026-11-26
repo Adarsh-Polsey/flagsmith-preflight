@@ -11,7 +11,23 @@ Flagsmith's own setup guide lists these as the [most common causes](https://docs
 
 **Field scan:** runs Saturday, Nov 28; the numbers land here.
 
-![preflight check on the demo app: four red checks](docs/check.gif)
+![From the recorded run: four red checks, all green, not callable yet, a winner, shipped](docs/check.gif)
+
+## The recorded run
+
+Run once, end to end, on Flagsmith Cloud on Thu Nov 26 against the demo app. Traffic was **simulated**: "Join the waitlist" truly converts at 10%, "Get early access" at 14%.
+
+| Stage | What happened |
+|---|---|
+| 1 Design | One line in. The agent wrote [plan.md](docs/demo-plan.md) (~1,800 users per variation for +30% on a 10% baseline), and on a yes created the metric and the experiment. |
+| 2 Check | `4 failed · 9 passed`: an unkeyed variation, `uuid4()` per request, `'Signup'` vs `'signup'`, and a session id for the conversion. |
+| 3 Fixes | One yes per fix. The agent's smallest fix reused the app's existing session cookie as the visitor id ([diff](docs/demo-fixes.md)). Then `13 passed`. |
+| 4 Start | `[y/N] y`, running. |
+| 5 Readout, 205 users | **Not callable yet**: lift +42.2%, 95% interval −67.9% to +152.2%, about 520 more users per variation needed. At the same moment the dashboard said "77% Winner Probability Confirmed … Consider rolling out early_access" ([screenshot](docs/dashboard-at-205-users.png)). |
+| 5 Readout, 6,005 users | **early_access wins**: 12.5% vs 9.4%, lift +33.4%, 95% interval +13.9% to +52.9%. |
+| 6 Ship | On a yes: experiment completed, results frozen, and every new identity gets "Get early access" (`flagsmith evaluate`, and the running app). No redeploy. |
+| 7 Clean up | On a yes, the [cleanup diff](docs/demo-cleanup.md) removed the flag read and the losing branch, then `signup_cta` was archived. |
+| Log | 8 approvals, 0 declines: [demo-approvals.jsonl](docs/demo-approvals.jsonl). |
 
 ## What it is
 
@@ -121,10 +137,14 @@ The demo app uses the Python SDK: `Flagsmith(environment_key=..., enable_events=
 Every change asks first. In a terminal the CLI prompts `[y/N]`; in Claude Code the agent asks in chat and passes the reply as `--yes --note "<their words>"` (`--yes` without a note is refused). Both land in `.preflight/approvals.jsonl`, declines included:
 
 ```json
-{"at": "2026-11-27T10:14:02+05:30", "who": "Adarsh-Polsey", "stage": "start", "action": "start experiment 523 (Signup CTA), locking signup_cta", "answer": "y", "via": "prompt"}
+{"at": "2026-11-26T08:54:19+05:30", "who": "Adarsh-Polsey", "stage": "fix", "action": "stable identifier: use the session cookie as the visitor id in app.py, set it once with a 1-year max_age", "answer": "y", "via": "chat", "note": "yes"}
 ```
 
 `preflight approvals` prints it as a table. The demo run's log is in [docs/demo-approvals.jsonl](docs/demo-approvals.jsonl).
+
+## How the demo video was made
+
+The agent ran as real `claude -p` turns in `demo/`, with a narrow tool allowlist (read, edit, and `preflight` / `flagsmith` / `git diff` commands). The human's replies in the video ("yes") were typed by the recording script. Agent scenes replay that recorded session at reading speed; terminal scenes are live recordings of the commands against Flagsmith Cloud; dashboard shots are screenshots taken during the run.
 
 ## Environment variables
 
@@ -146,6 +166,8 @@ No keys live in the repo: `flagsmith.json`, `.env` and keys are gitignored, and 
 - "More users needed" scales the current interval by the square root of the sample; it's a rough guide, not a power analysis.
 - `create` makes string flags, splits evenly and rolls out to 100%.
 - The approvals log is a local append-only file, not tamper-proof.
+- Flagsmith serves an experiment's split as soon as the experiment is created, before start; exposures are only recorded after start.
+- Right after ship, Flagsmith's edge API takes a few seconds to serve the winner; `ship` polls for up to 60 s.
 - Flagsmith Experimentation is in beta; the endpoints above may change. Updating a variation's key with `flagsmith feature variant update --key` returns 500 today (it sends a partial body), so Preflight sends the whole option.
 
 ## Repo map
