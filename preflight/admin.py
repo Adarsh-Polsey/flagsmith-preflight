@@ -1,6 +1,7 @@
 import json
 import re
 import subprocess
+from datetime import datetime, timezone
 
 
 class FlagsmithError(Exception):
@@ -89,8 +90,12 @@ class Admin:
         except FlagsmithError as e:
             if e.status != 429:
                 raise
-            m = re.search(r"(\d+) seconds", json.dumps(e.body))
-            return int(m.group(1)) if m else 300
+            current = self.api(self.env(f"experiments/{experiment_id}/{what}/"))[what] or {}
+            asked = current.get("refresh_requested_at")
+            if not asked:
+                return 300
+            elapsed = (datetime.now(timezone.utc) - datetime.fromisoformat(asked)).total_seconds()
+            return max(1, int(300 - elapsed))
 
     def results(self, experiment_id: int) -> dict | None:
         return self.api(self.env(f"experiments/{experiment_id}/results/"))["results"]
