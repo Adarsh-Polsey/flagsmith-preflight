@@ -1,0 +1,14 @@
+.env
+.env.*
+*.key
+STATUS.md
+NOTES.md
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.DS_Store
+flagsmith.json
