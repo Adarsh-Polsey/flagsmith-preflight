@@ -141,3 +141,11 @@ def test_ship_reports_a_winner_that_isnt_served(app, monkeypatch, capsys):
     answer(monkeypatch, "y")
     assert cli.main(["ship"]) == 1
     assert "✗ only 0/5" in capsys.readouterr().out
+
+
+def test_code_only_check_needs_no_flagsmith(app, monkeypatch, capsys):
+    monkeypatch.delenv("FLAGSMITH_ENVIRONMENT")
+    (app / "app.py").write_text(GOOD_APP.replace('"signup"', '"Signup"'))
+    assert cli.main(["check", "--code-only", "--event", "signup"]) == 1
+    out = capsys.readouterr().out
+    assert "did you mean 'signup'" in out and "Setup" not in out

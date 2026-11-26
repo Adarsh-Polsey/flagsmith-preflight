@@ -69,6 +69,12 @@ def cmd_estimate(args) -> int:
 
 
 def cmd_check(args) -> int:
+    if args.code_only:
+        root = state.find_root(Path(args.path or ".").resolve())
+        flag = args.flag or state.load(root).get("flag")
+        results = check_code(root, flag, args.event or None)
+        print(render(results) if not args.json else json.dumps([r.to_dict() for r in results], indent=2))
+        return 1 if failed(results) else 0
     ctx = Context(args.path)
     results, info = run_checks(ctx)
     if args.json:
@@ -354,6 +360,9 @@ def main(argv=None) -> int:
 
     s = sub.add_parser("check", help="stage 2: setup and code checks")
     s.add_argument("--json", action="store_true")
+    s.add_argument("--code-only", action="store_true", help="skip Flagsmith; for CI")
+    s.add_argument("--flag", help="with --code-only: the flag to look for")
+    s.add_argument("--event", action="append", help="with --code-only: the metric's event (repeatable)")
     s.set_defaults(fn=cmd_check)
 
     s = sub.add_parser("set-key", help="stage 3 fix: give a variation its key")
