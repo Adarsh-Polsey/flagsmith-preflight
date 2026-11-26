@@ -261,10 +261,23 @@ def cmd_ship(args) -> int:
     ctx.admin.complete(exp["id"], r.winner_id)
     exp = ctx.admin.experiment(exp["id"])
     print(paint(f"✓ {exp['name']!r} is {exp['status']}: results are frozen and {ctx.flag} is unlocked.", "32;1"))
-    served = [ctx.admin.evaluate(ctx.flag, f"preflight-ship-check-{uuid.uuid4().hex[:8]}").get("value") for _ in range(5)]
-    ok = sum(v == value for v in served)
-    print(paint(f"✓ {ok}/5 new identities get {value!r}. No redeploy.", "32;1" if ok == 5 else "31;1"))
-    return 0 if ok == 5 else 1
+    ok = served_to_new_identities(ctx, value)
+    if ok == 5:
+        print(paint(f"✓ 5/5 new identities get {value!r}. No redeploy.", "32;1"))
+        return 0
+    print(paint(f"✗ only {ok}/5 new identities get {value!r} after 60 s: check the flag in Flagsmith.", "31;1"))
+    return 1
+
+
+def served_to_new_identities(ctx: Context, value: str, timeout: int = 60) -> int:
+    # Flagsmith's edge API takes a few seconds to pick up the change, so poll.
+    deadline = time.time() + timeout
+    while True:
+        served = [ctx.admin.evaluate(ctx.flag, f"preflight-ship-check-{uuid.uuid4().hex[:8]}").get("value") for _ in range(5)]
+        ok = sum(v == value for v in served)
+        if ok == 5 or time.time() > deadline:
+            return ok
+        time.sleep(3)
 
 
 def flag_references(root: Path, flag: str) -> list[str]:
