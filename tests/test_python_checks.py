@@ -376,3 +376,14 @@ def test_web_app_with_main_guard_is_not_a_script(run):
         app.run()
     """))
     assert status(results, "events flushed") == "pass"
+
+
+def test_unrelated_function_with_the_same_name_is_ignored(run):
+    results = run({"sim.py": """
+    def get_experiment_flag(name, identifier):
+        return name in ("a", "b")
+
+    def main():
+        return get_experiment_flag("signup_cta", identifier="x")
+    """})
+    assert status(results, "exposure recorded") == "fail"

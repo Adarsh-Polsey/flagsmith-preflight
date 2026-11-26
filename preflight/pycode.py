@@ -1,4 +1,5 @@
 import ast
+import warnings
 from dataclasses import dataclass, field
 
 from .facts import (
@@ -263,11 +264,14 @@ def short_lived(tree: ast.Module, modules: set[str]) -> tuple[str, int]:
 
 def scan_python(source: str, rel: str) -> FileFacts | None:
     try:
-        tree = ast.parse(source)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", SyntaxWarning)
+            tree = ast.parse(source)
     except SyntaxError:
         return None
     modules = imported_modules(tree)
     module = build_scope(tree, None)
+    local_defs = {n.name for n in ast.walk(tree) if isinstance(n, FUNC_NODES)}
     facts = FileFacts(rel, "python")
 
     clients = set()
@@ -293,7 +297,7 @@ def scan_python(source: str, rel: str) -> FileFacts | None:
         name = call_name(call.func)
         recv = receiver(call.func)
         uses_sdk = "flagsmith" in modules or recv in clients
-        if name in EXPOSURE_FUNCS:
+        if name in EXPOSURE_FUNCS and ("flagsmith" in modules or (isinstance(call.func, ast.Attribute) and name not in local_defs)):
             flag = literal(arg(call, 0, "feature_name"), module)
             ident = classify(arg(call, 1, "identifier"), scope)
             facts.calls.append(Call("exposure", rel, call.lineno, "python", flag=flag, ident=ident, note=name))
