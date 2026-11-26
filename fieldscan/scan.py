@@ -10,12 +10,15 @@ import subprocess
 import sys
 import tempfile
 import time
+import warnings
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from preflight.code_checks import check_code  # noqa: E402
+
+warnings.simplefilter("ignore", SyntaxWarning)
 
 QUERIES = [
     "get_experiment_flag language:python",
@@ -101,7 +104,10 @@ def main():
         "repos_with_any_failure": any_failure,
         "checks": {c: dict(t) for c, t in sorted(tally.items())},
     }
-    print(json.dumps(report, indent=2))
+    text = json.dumps(report, indent=2)
+    print(text)
+    if len(sys.argv) > 1:
+        Path(sys.argv[1]).write_text(text + "\n")
 
 
 if __name__ == "__main__":
