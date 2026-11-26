@@ -1,0 +1,37 @@
+{
+  "scanned_at": "2026-11-26T07:46+00:00",
+  "candidates": 31,
+  "qualified": 20,
+  "repos_with_any_failure": 1,
+  "repos_all_clear": 8,
+  "checks": {
+    "SDK version": {
+      "pass": 19,
+      "fail": 1
+    },
+    "event name": {
+      "pass": 20
+    },
+    "events enabled": {
+      "pass": 14,
+      "warn": 6
+    },
+    "events flushed": {
+      "pass": 20
+    },
+    "exposure recorded": {
+      "pass": 20
+    },
+    "identified first": {
+      "pass": 20
+    },
+    "same identifier": {
+      "pass": 16,
+      "warn": 4
+    },
+    "stable identifier": {
+      "warn": 8,
+      "pass": 12
+    }
+  }
+}

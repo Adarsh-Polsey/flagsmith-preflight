@@ -9,7 +9,7 @@ Toggle Wars entry · Track 2: AI Agents and Feature Flags
 A Flagsmith experiment can look healthy while its numbers mean nothing: a fresh ID on every request, an event named `Signup` when the metric counts `signup`, or a variation without a key.
 Flagsmith's own setup guide lists these as the [most common causes](https://docs.flagsmith.com/experimentation/set-up-with-a-coding-agent#after-it-runs) of missing exposures and conversions, and the organiser's [How to Win post](https://www.wemakedevs.org/blogs/how-to-win-toggle-wars) calls them "wiring mistakes that invalidate a result".
 
-**Field scan:** runs Saturday, Nov 28; the numbers land here.
+**Field scan (Thu Nov 26):** 20 public GitHub repos call Flagsmith's experiment SDK. Preflight's checks pass cleanly in **8**. **12** leave at least one wiring question that static checks can't settle (an identifier passed in from elsewhere, client options in a variable, a simulator minting ids), and **1** pins an SDK too old to send experiment events. Counts only, no repo names: [fieldscan/results.json](fieldscan/results.json). A first pass counted 13 failures; auditing them turned up scanner false positives (code inside test-fixture strings, function definitions, options in variables), now fixed and covered by tests.
 
 ![From the recorded run: four red checks, all green, not callable yet, a winner, shipped](docs/check.gif)
 

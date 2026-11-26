@@ -11,7 +11,8 @@ def main():
     r = json.load(open(sys.argv[1]))
     print(f"\033[1mField scan · {r['scanned_at'][:10]} · public GitHub repos that call Flagsmith's experiment SDK\033[0m")
     print(f"  {r['qualified']} repos scanned read-only (from {r['candidates']} code-search candidates; names not kept)")
-    print(f"  \033[31;1m{r['repos_with_any_failure']} of {r['qualified']}\033[0m have at least one failing check\n")
+    print(f"  \033[32;1m{r['repos_all_clear']} of {r['qualified']}\033[0m pass every check")
+    print(f"  \033[33;1m{r['qualified'] - r['repos_all_clear']} of {r['qualified']}\033[0m have something to look at; \033[31;1m{r['repos_with_any_failure']}\033[0m with a hard failure\n")
     print(f"  {'check':<20} {'fail':>5} {'warn':>5} {'pass':>5}")
     for check in ORDER:
         c = r["checks"].get(check, {})

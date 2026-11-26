@@ -61,10 +61,14 @@ def candidates() -> list[str]:
 
 def scan_repo(full_name: str, workdir: Path) -> dict | None:
     dest = workdir / "repo"
-    clone = subprocess.run(
-        ["git", "clone", "--quiet", "--depth", "1", "--single-branch", "--filter=blob:limit=500k", f"https://github.com/{full_name}.git", str(dest)],
-        capture_output=True, text=True, timeout=180, env={"GIT_TERMINAL_PROMPT": "0", "GIT_LFS_SKIP_SMUDGE": "1", "PATH": "/usr/bin:/bin:/opt/homebrew/bin"},
-    )
+    try:
+        clone = subprocess.run(
+            ["git", "clone", "--quiet", "--depth", "1", "--single-branch", "--filter=blob:limit=500k", f"https://github.com/{full_name}.git", str(dest)],
+            capture_output=True, text=True, timeout=180, env={"GIT_TERMINAL_PROMPT": "0", "GIT_LFS_SKIP_SMUDGE": "1", "PATH": "/usr/bin:/bin:/opt/homebrew/bin"},
+        )
+    except subprocess.TimeoutExpired:
+        shutil.rmtree(dest, ignore_errors=True)
+        return None
     try:
         if clone.returncode != 0:
             return None
@@ -86,7 +90,7 @@ def main():
     repos = candidates()
     print(f"{len(repos)} candidate repos from code search", file=sys.stderr)
     tally: dict[str, Counter] = {}
-    qualified = any_failure = 0
+    qualified = any_failure = all_clear = 0
     with tempfile.TemporaryDirectory(prefix="preflight-fieldscan-") as tmp:
         for i, name in enumerate(repos, 1):
             per_check = scan_repo(name, Path(tmp))
@@ -95,6 +99,7 @@ def main():
                 continue
             qualified += 1
             any_failure += "fail" in per_check.values()
+            all_clear += set(per_check.values()) == {"pass"}
             for check, status in per_check.items():
                 tally.setdefault(check, Counter())[status] += 1
     report = {
@@ -102,6 +107,7 @@ def main():
         "candidates": len(repos),
         "qualified": qualified,
         "repos_with_any_failure": any_failure,
+        "repos_all_clear": all_clear,
         "checks": {c: dict(t) for c, t in sorted(tally.items())},
     }
     text = json.dumps(report, indent=2)
