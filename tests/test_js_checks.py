@@ -185,3 +185,79 @@ def test_comments_are_ignored(run):
     const flag = await flagsmith.getExperimentFlag('signup_cta', req.user.id);
     """))
     assert status(results, "stable identifier") == "pass"
+
+
+def test_code_inside_strings_is_not_scanned(run):
+    results = run({"lint.ts": """
+    import flagsmith from '@flagsmith/flagsmith';
+    const fixture = "flagsmith.init({ environmentID: 'x' });\\nflagsmith.trackEvent('a');";
+    const other = `flagsmith.getExperimentFlag('f', Date.now())`;
+    """, **WEB_PKG})
+    assert {r.status for r in only(results, "exposure recorded")} == {"fail"}
+    assert not [r for r in results if r.check == "events enabled" and r.status == "fail"]
+
+
+def test_function_named_track_event_is_a_definition_not_a_call(run):
+    results = run(node("""
+    export async function trackEvent(event: string, identity: string): Promise<void> {
+      flagsmith.trackEvent(event, { identifier: identity });
+    }
+    flagsmith.getExperimentFlag('signup_cta', req.user.id);
+    """), events=None)
+    assert status(results, "same identifier") != "fail"
+
+
+def test_init_options_from_a_variable_are_resolved(run):
+    results = run({"main.js": """
+    import flagsmith from '@flagsmith/flagsmith';
+    const options = { environmentID: 'x', enableEvents: true };
+    await flagsmith.init(options);
+    await flagsmith.identify(user.id);
+    flagsmith.getExperimentFlag('signup_cta');
+    """, **WEB_PKG})
+    assert status(results, "events enabled") == "pass"
+
+
+def test_init_options_from_a_spread_warn(run):
+    results = run({"main.js": """
+    import flagsmith from '@flagsmith/flagsmith';
+    await flagsmith.init({ ...shared });
+    await flagsmith.identify(user.id);
+    flagsmith.getExperimentFlag('signup_cta');
+    """, **WEB_PKG})
+    assert status(results, "events enabled") == "warn"
+
+
+def test_simulator_minting_an_id_per_visitor_only_warns(run):
+    results = run({"scripts/simulate.mjs": NODE_HEAD + """
+    for (let i = 0; i < 500; i++) {
+      const id = `sim-${Date.now()}-${i}`;
+      await flagsmith.getExperimentFlag('signup_cta', id);
+      flagsmith.trackEvent('signup', { identifier: id });
+    }
+    """, **PKG})
+    assert status(results, "stable identifier") == "warn"
+    assert status(results, "same identifier") == "pass"
+
+
+def test_one_client_without_events_beside_one_with_them_warns(run):
+    results = run({
+        "page.tsx": BROWSER_HEAD + "await flagsmith.identify(user.id);\nflagsmith.getExperimentFlag('signup_cta');\n",
+        "debug/page.tsx": "import flagsmith from '@flagsmith/flagsmith';\nflagsmith.init({ environmentID: 'x' });\n",
+        **WEB_PKG,
+    })
+    assert status(results, "events enabled") == "warn"
+
+
+def test_track_event_options_from_a_variable(run):
+    resolved = run(node("""
+    const payload = { identifier: req.user.id, value: 1 };
+    flagsmith.getExperimentFlag('signup_cta', req.user.id);
+    flagsmith.trackEvent('signup', payload);
+    """))
+    assert status(resolved, "same identifier") == "pass"
+    unresolved = run(node("""
+    flagsmith.getExperimentFlag('signup_cta', req.user.id);
+    flagsmith.trackEvent('signup', buildPayload());
+    """))
+    assert status(unresolved, "same identifier") != "fail"

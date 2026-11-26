@@ -104,13 +104,13 @@ preflight ship                                          # only if the readout na
 | Check | Fails when | Why it matters |
 |---|---|---|
 | exposure recorded | no `get_experiment_flag` / `getExperimentFlag` / `useExperiment` reads the flag | Nothing enrols users. |
-| stable identifier | the identifier comes from `uuid4()`, `randomUUID()`, `Math.random()`, `Date.now()` or a request id, made per request. Passes on a cookie, session or user id (including get-or-create cookies); warns when it can't tell | Visitors switch variations and are counted twice. |
+| stable identifier | the identifier comes from `uuid4()`, `randomUUID()`, `Math.random()`, `Date.now()` or a request id, made per request. Passes on a cookie, session or user id (including get-or-create cookies); warns when it can't tell, and in traffic simulators that mint one id per simulated visitor | Visitors switch variations and are counted twice. |
 | identified first | no identifier is passed, or `identify()` runs after the flag is read | Exposures without an identity are skipped. |
 | event name | `track_event` / `trackEvent` doesn't send the metric's event exactly; suggests the near miss (`'Signup'` → `'signup'`) | Event names are case-sensitive; unmatched events are silently ignored. |
 | same identifier | the conversion uses a different identifier from the exposure (e.g. session id vs visitor id) | Conversions only count after the same identity's exposure. |
-| events enabled | the SDK client is created without `enable_events` / `enableEvents` | Nothing is sent. |
+| events enabled | no SDK client enables `enable_events` / `enableEvents` (warns when options come from a variable, or when one client has them off beside one that has them on) | Nothing is sent. |
 | events flushed | a script or serverless handler sends events and exits without `close()` / `flush_events()` / `flushEvents()` | Buffered events are dropped at exit. |
-| SDK version | `flagsmith` < 6.3.0, `@flagsmith/nodejs` < 9.1.0, `@flagsmith/flagsmith` < 12.4.0, or the old `flagsmith-nodejs` / `flagsmith` npm packages | Older SDKs can't send experiment events. |
+| SDK version | the pinned or locked version can't reach `flagsmith` 6.3.0, `@flagsmith/nodejs` 9.1.0 or `@flagsmith/flagsmith` 12.4.0, or the old `flagsmith-nodejs` / `flagsmith` npm packages are used (a range that merely allows older versions warns) | Older SDKs can't send experiment events. |
 
 ### Smoke (optional, after start)
 
@@ -160,7 +160,7 @@ No keys live in the repo: `flagsmith.json`, `.env` and keys are gitignored, and 
 
 ## Known limits
 
-- The code checks are static heuristics. Identifiers that come from another module or a function parameter get a warning, not a verdict. JS/TS is parsed with a tokenizer, not a type checker. Java, Go and Flutter aren't scanned.
+- The code checks are static heuristics. Identifiers that come from another module or a function parameter get a warning, not a verdict. JS/TS is parsed with a tokenizer, not a type checker (code inside strings is ignored). Test files and folders are skipped. Java, Go and Flutter aren't scanned.
 - The smoke check needs a running experiment (Flagsmith only records exposures then), so its visitors count in the results. Run it on a staging environment, or right after start.
 - The readout judges the experiment's first metric. Guardrails ("should not decrease/increase" metrics, e.g. `create --guardrail-event page_view`) block a winner only when their interval sits wholly on the wrong side.
 - "More users needed" scales the current interval by the square root of the sample; it's a rough guide, not a power analysis.

@@ -387,3 +387,57 @@ def test_unrelated_function_with_the_same_name_is_ignored(run):
         return get_experiment_flag("signup_cta", identifier="x")
     """})
     assert status(results, "exposure recorded") == "fail"
+
+
+def test_client_built_from_kwargs_warns(run):
+    results = run({"flags.py": """
+    from flagsmith import Flagsmith
+    def client(**kwargs):
+        return Flagsmith(**kwargs)
+    def home(user_id):
+        client().get_experiment_flag("signup_cta", identifier=user_id)
+    """, **REQS})
+    assert status(results, "events enabled") == "warn"
+
+
+def test_offline_client_is_ignored(run):
+    results = run({"flags.py": """
+    from flagsmith import Flagsmith
+    offline = Flagsmith(offline_mode=True, offline_handler=handler)
+    live = Flagsmith(environment_key="x", enable_events=True)
+    def home(user_id):
+        live.get_experiment_flag("signup_cta", identifier=user_id)
+    """, **REQS})
+    assert status(results, "events enabled") == "pass"
+
+
+def test_test_files_are_skipped(run):
+    results = run({
+        "tests/test_flags.py": """
+        from flagsmith import Flagsmith
+        flagsmith = Flagsmith(environment_key="x")
+        flagsmith.get_experiment_flag("signup_cta", identifier=str(uuid.uuid4()))
+        """,
+        **GOOD,
+    })
+    assert [r for r in results if r.status != "pass"] == []
+
+
+def test_same_variable_in_one_scope_joins_even_if_random(run):
+    results = run({"simulate.py": """
+    import uuid
+    from flagsmith import Flagsmith
+    flagsmith = Flagsmith(environment_key="x", enable_events=True)
+
+    def visit():
+        vid = str(uuid.uuid4())
+        flagsmith.get_experiment_flag("signup_cta", identifier=vid)
+        flagsmith.track_event("signup", identifier=vid)
+
+    if __name__ == "__main__":
+        for _ in range(100):
+            visit()
+        flagsmith.close()
+    """, **REQS})
+    assert status(results, "stable identifier") == "warn"
+    assert status(results, "same identifier") == "pass"

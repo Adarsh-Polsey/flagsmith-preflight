@@ -47,6 +47,29 @@ def lowest_allowed(spec: str) -> tuple[int, ...] | None:
     return None
 
 
+def upper_bound(spec: str) -> tuple[int, ...] | None:
+    # The exclusive ceiling a spec puts on installs; None when unbounded above.
+    ceilings = []
+    for part in re.split(r"[,|]|\s+", spec.strip()):
+        v = version_tuple(part)
+        if not v:
+            continue
+        x, y, z = v
+        if part.startswith("^"):
+            ceilings.append((x + 1, 0, 0) if x else (0, y + 1, 0))
+        elif part.startswith("~="):
+            ceilings.append((x + 1, 0, 0) if part.count(".") == 1 else (x, y + 1, 0))
+        elif part.startswith("~"):
+            ceilings.append((x, y + 1, 0))
+        elif part.startswith("<="):
+            ceilings.append((x, y, z + 1))
+        elif part.startswith("<"):
+            ceilings.append(v)
+        elif re.match(r"^(==|===|=)?v?\d", part):
+            ceilings.append((x, y, z + 1))
+    return min(ceilings) if ceilings else None
+
+
 def walk(root: Path, names: tuple[str, ...]):
     for path in sorted(root.rglob("*")):
         if path.is_file() and path.name in names and not SKIP_DIRS & set(path.relative_to(root).parts):
@@ -122,14 +145,17 @@ def check_deps(deps: list[Dep], langs: set[str]) -> list[Result]:
             continue
         need = MINIMUM[key]
         need_text = ".".join(map(str, need))
-        have = version_tuple(d.locked) if d.locked else lowest_allowed(d.spec)
         label = f"{d.name} {d.locked or d.spec}".strip()
-        if have is None:
-            results.append(Result("SDK version", WARN, f"{d.name} is unpinned: make sure the installed version is {need_text}+", where))
-        elif have < need:
-            results.append(Result("SDK version", FAIL, f"{label} allows versions below {need_text}, which can't record experiment events", where))
-        else:
+        low = version_tuple(d.locked) if d.locked else lowest_allowed(d.spec)
+        ceiling = (*low[:2], low[2] + 1) if d.locked and low else upper_bound(d.spec)
+        if low is not None and low >= need:
             results.append(Result("SDK version", PASS, f"{label} meets {need_text}+", where))
+        elif ceiling is not None and ceiling <= need:
+            results.append(Result("SDK version", FAIL, f"{label} can't reach {need_text}, the first version that records experiment events", where))
+        elif low is None:
+            results.append(Result("SDK version", WARN, f"{d.name} is unpinned: make sure the installed version is {need_text}+", where))
+        else:
+            results.append(Result("SDK version", WARN, f"{label} also allows versions below {need_text}: raise the minimum to {need_text}", where))
     if not deps and langs:
         results.append(Result("SDK version", WARN, "no Flagsmith SDK found in requirements, pyproject.toml or package.json"))
     return results

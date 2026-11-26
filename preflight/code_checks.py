@@ -1,4 +1,5 @@
 import difflib
+import re
 from pathlib import Path
 
 from .deps import SKIP_DIRS, check_deps, find_deps
@@ -7,6 +8,10 @@ from .jscode import scan_js
 from .pycode import scan_python
 from .result import FAIL, PASS, WARN, Result
 
+TEST_PARTS = {"test", "tests", "__tests__", "spec", "specs", "fixtures", "__fixtures__", "e2e", "cypress"}
+TEST_NAME = re.compile(r"(^test_.*\.py$|_test\.py$|^conftest\.py$|\.(test|spec)\.[jt]sx?$)")
+# Scripts that stand in for many visitors may mint a fresh id per simulated visitor on purpose.
+SIMULATOR_NAME = re.compile(r"simulat|seed|traffic|load.?test|bench|smoke", re.I)
 PY_EXT = {".py"}
 JS_EXT = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}
 MAX_FILE_BYTES = 400_000
@@ -18,7 +23,9 @@ def scan(root: Path) -> list[FileFacts]:
         if not path.is_file() or path.suffix not in PY_EXT | JS_EXT:
             continue
         rel_parts = path.relative_to(root).parts
-        if SKIP_DIRS & set(rel_parts) or path.stat().st_size > MAX_FILE_BYTES:
+        if SKIP_DIRS & set(rel_parts) or TEST_PARTS & {p.lower() for p in rel_parts[:-1]} or TEST_NAME.search(path.name):
+            continue
+        if path.stat().st_size > MAX_FILE_BYTES:
             continue
         src = path.read_text(errors="ignore")
         rel = str(path.relative_to(root))
@@ -39,7 +46,8 @@ def check_code(root: Path, flag: str | None = None, metric_events: list[str] | N
     conversions = [c for c in calls if c.kind == "conversion"]
     results = [check_exposure_found(exposures, flag)]
     if exposures:
-        results += check_stable(exposures)
+        scripts = {f.file for f in files if f.short_lived == "script" or SIMULATOR_NAME.search(f.file)}
+        results += check_stable(exposures, scripts)
         results += check_identified(exposures)
     results += check_event_names(conversions, metric_events)
     results += check_same_identifier(exposures, conversions, metric_events)
@@ -58,11 +66,13 @@ def check_exposure_found(exposures: list[Call], flag: str | None) -> Result:
     return Result("exposure recorded", PASS, f"{first.note}({first.flag or '…'!r}) records the exposure{more}", where(first))
 
 
-def check_stable(exposures: list[Call]) -> list[Result]:
+def check_stable(exposures: list[Call], scripts: set[str] = frozenset()) -> list[Result]:
     results = []
     for c in exposures:
         s = c.ident.status
-        if s == RANDOM:
+        if s == RANDOM and c.file in scripts:
+            results.append(Result("stable identifier", WARN, f"{c.ident.reason}: fine for a traffic simulator, wrong for real visitors", where(c)))
+        elif s == RANDOM:
             results.append(Result("stable identifier", FAIL, f"{c.ident.reason}: visitors switch variations and get counted twice", where(c)))
         elif s == CONSTANT:
             results.append(Result("stable identifier", WARN, c.ident.reason, where(c)))
@@ -127,6 +137,12 @@ def joinable(sources: frozenset) -> frozenset:
     return frozenset(s for s in sources if not s.startswith("random:"))
 
 
+def concrete(sources: frozenset) -> frozenset:
+    # A bare name (a parameter, an unresolved variable) says nothing about where the value comes from,
+    # and a browser identity can't be compared with an identifier passed on a server.
+    return frozenset(s for s in sources if not s.startswith(("name:", "browser:")))
+
+
 def describe(sources: frozenset) -> str:
     names = []
     for s in sorted(sources):
@@ -152,7 +168,7 @@ def check_same_identifier(exposures: list[Call], conversions: list[Call], metric
             results.append(Result("same identifier", FAIL, "conversion sent without an identifier: it can't be joined to an exposure", where(c)))
         elif joinable(c.ident.sources) & exp_joinable:
             continue
-        elif c.ident.status in (STABLE, RANDOM, CONSTANT) and any(e.ident.status in (STABLE, RANDOM, CONSTANT) for e in exposures):
+        elif concrete(c.ident.sources) and concrete(exp_sources):
             results.append(Result("same identifier", FAIL, f"conversion uses {describe(c.ident.sources)} but the exposure uses {describe(exp_sources)}: they never join", where(c)))
         else:
             results.append(Result("same identifier", WARN, f"can't confirm the conversion ({describe(c.ident.sources)}) uses the exposure's identifier ({describe(exp_sources)})", where(c)))
@@ -162,11 +178,16 @@ def check_same_identifier(exposures: list[Call], conversions: list[Call], metric
 
 
 def check_events_enabled(inits: list[Call], uses_events: bool) -> list[Result]:
-    off = [c for c in inits if not c.events_enabled]
+    off = [c for c in inits if c.events_enabled is False]
+    on = [c for c in inits if c.events_enabled]
+    if off and on:
+        return [Result("events enabled", WARN, f"this client has events off while another has them on: read experiment flags through the one with events ({where(on[0])})", where(c)) for c in off]
     if off:
         return [Result("events enabled", FAIL, "SDK client created without enable_events / enableEvents: no exposures or conversions are sent", where(c)) for c in off]
+    if on:
+        return [Result("events enabled", PASS, "SDK client created with events enabled", where(on[0]))]
     if inits:
-        return [Result("events enabled", PASS, "SDK client created with events enabled", where(inits[0]))]
+        return [Result("events enabled", WARN, "the client's options come from a variable or **kwargs: check events are enabled", where(inits[0]))]
     if uses_events:
         return [Result("events enabled", WARN, "couldn't find where the SDK client is created: check events are enabled")]
     return []

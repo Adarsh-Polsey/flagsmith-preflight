@@ -31,8 +31,12 @@ def test_python_unpinned_warns(run):
     assert status(run(with_files(**{"requirements.txt": "flagsmith\n"})), "SDK version") == "warn"
 
 
-def test_python_range_starting_too_low_fails(run):
-    assert status(run(with_files(**{"requirements.txt": "flagsmith>=5,<7\n"})), "SDK version") == "fail"
+def test_python_range_that_allows_old_versions_warns(run):
+    assert status(run(with_files(**{"requirements.txt": "flagsmith>=5,<7\n"})), "SDK version") == "warn"
+
+
+def test_python_range_capped_below_minimum_fails(run):
+    assert status(run(with_files(**{"requirements.txt": "flagsmith>=5,<6.3\n"})), "SDK version") == "fail"
 
 
 def test_other_flagsmith_packages_are_ignored(run):
@@ -41,8 +45,12 @@ def test_other_flagsmith_packages_are_ignored(run):
 
 
 def test_pyproject_dependency(run):
-    toml = '[project]\nname = "x"\ndependencies = ["flagsmith~=6.2"]\n'
+    toml = '[project]\nname = "x"\ndependencies = ["flagsmith~=6.2.0"]\n'
     assert status(run(with_files(**{"pyproject.toml": toml})), "SDK version") == "fail"
+
+
+def test_caret_range_that_can_reach_the_minimum_warns(run):
+    assert status(run(with_files(**{"package.json": package({"@flagsmith/flagsmith": "^12.1.2"})})), "SDK version") == "warn"
 
 
 def test_poetry_dependency(run):

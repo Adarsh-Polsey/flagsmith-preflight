@@ -41,6 +41,30 @@ def strip_comments(src: str) -> str:
     return "".join(out)
 
 
+def mask_strings(src: str) -> str:
+    # Same length as src, with string contents blanked, so code inside test-fixture strings isn't matched.
+    out, i, n = [], 0, len(src)
+    while i < n:
+        c = src[i]
+        if c in "'\"`":
+            j = i + 1
+            while j < n and src[j] != c:
+                j += 2 if src[j] == "\\" else 1
+            body = src[i + 1:min(j, n)]
+            out.append(c + re.sub(r"[^\n]", " ", body) + (c if j < n else ""))
+            i = j + 1
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)[:n]
+
+
+def is_definition(src: str, start: int, end: int) -> bool:
+    # `function trackEvent(...) {` or a method `trackEvent(event): void {` defines, rather than calls.
+    rest = src[end:end + 80].lstrip()
+    return src[:start].rstrip().endswith("function") or rest.startswith("{") or bool(re.match(r":\s*[\w<>\[\]|.,\s]+\{", rest))
+
+
 def split_args(src: str, start: int) -> tuple[list[str], int]:
     # start points just past "(": return top-level args and the index after ")".
     depth, i, args, cur = 0, start, [], []
@@ -171,18 +195,22 @@ class JsFile:
         if re.fullmatch(r"[\w$]+", text):
             values = [v for v in self.assignments(text) if not re.search(rf"\b{re.escape(text)}\b", v)]
             if values:
-                return self.any_of([self.classify(v, depth + 1) for v in values])
+                result = self.any_of([self.classify(v, depth + 1) for v in values])
+                if result.status == RANDOM:
+                    return Ident(RANDOM, result.reason, result.sources | {f"var:{text}"})
+                return result
         rm = RANDOM_RE.search(text)
         if rm:
             line = line_of(self.src, self.src.find(text)) if text in self.src else 0
             at = f" (line {line})" if line else ""
             return Ident(RANDOM, f"{rm.group(0).rstrip('( ')}(){at} is new on every request", frozenset({f"random:{rm.group(0)}"}))
         kind = hint(text) or (STABLE if any(w in text.lower() for w in JS_STABLE_WORDS) else None)
+        key = f"name:{text}" if re.fullmatch(r"[\w$]+", text) else source_key(text)
         if kind == STABLE:
-            return Ident(STABLE, f"{text} is tied to the visitor", frozenset({source_key(text)}))
+            return Ident(STABLE, f"{text} is tied to the visitor", frozenset({key}))
         if kind == RANDOM:
-            return Ident(RANDOM, f"{text} changes on every request", frozenset({source_key(text)}))
-        return Ident(UNKNOWN, f"can't tell where {text} comes from", frozenset({source_key(text)}))
+            return Ident(RANDOM, f"{text} changes on every request", frozenset({key}))
+        return Ident(UNKNOWN, f"can't tell where {text} comes from", frozenset({key}))
 
     @staticmethod
     def any_of(idents: list[Ident]) -> Ident:
@@ -204,19 +232,22 @@ def scan_js(raw: str, rel: str) -> FileFacts | None:
     server = any(p.startswith(("@flagsmith/nodejs", "flagsmith-nodejs")) for p in packages)
     js = JsFile(src)
     facts = FileFacts(rel, "js")
+    code = mask_strings(src)
     identifies = []
-    for m in CALL_RE.finditer(src):
+    for m in CALL_RE.finditer(code):
         if m.group(2) == "identify" and (packages or "flagsmith" in (m.group(1) or "").lower()):
             args, _ = split_args(src, m.end())
             if args:
                 identifies.append((line_of(src, m.start()), js.classify(args[0])))
 
-    for m in CALL_RE.finditer(src):
+    for m in CALL_RE.finditer(code):
         recv, name = m.group(1) or "", m.group(2)
         is_sdk = bool(packages) or "flagsmith" in recv.lower()
         if not is_sdk:
             continue
-        args, _ = split_args(src, m.end())
+        args, end = split_args(src, m.end())
+        if is_definition(src, m.start(), end):
+            continue
         line = line_of(src, m.start())
         if name in ("getExperimentFlag", "useExperiment", "trackExposureEvent"):
             if name == "useExperiment" and not packages:
@@ -232,14 +263,22 @@ def scan_js(raw: str, rel: str) -> FileFacts | None:
             facts.calls.append(Call("exposure", rel, line, "js", flag=flag, ident=ident, note=name))
         elif name == "trackEvent":
             event = string_value(args[0]) if args else None
-            field = object_field(args[1], "identifier") if len(args) > 1 else None
-            if server or field:
+            options = args[1] if len(args) > 1 else ""
+            if re.fullmatch(r"[\w$]+", options):
+                options = next(iter(js.assignments(options)), options)
+            inline = options.strip().startswith("{")
+            field = object_field(options, "identifier") if inline else None
+            if field:
                 ident = js.classify(field)
+            elif server and options and not inline:
+                ident = Ident(UNKNOWN, f"the event's options come from {args[1]}: check it carries the exposure's identifier")
+            elif server:
+                ident = js.classify(None)
             else:
                 ident = browser_identity(js, src, line, identifies)
             facts.calls.append(Call("conversion", rel, line, "js", event=event, ident=ident))
         elif name == "init" and args:
-            facts.calls.append(Call("init", rel, line, "js", events_enabled=events_on(args[0])))
+            facts.calls.append(Call("init", rel, line, "js", events_enabled=events_on(args[0], js)))
             ident_text = object_field(args[0], "identity")
             if ident_text:
                 identifies.append((line, js.classify(ident_text)))
@@ -247,13 +286,15 @@ def scan_js(raw: str, rel: str) -> FileFacts | None:
         elif name in ("flushEvents", "close"):
             facts.flushes = True
 
-    for m in NEW_RE.finditer(src):
+    for m in NEW_RE.finditer(code):
         args, _ = split_args(src, m.end())
-        facts.calls.append(Call("init", rel, line_of(src, m.start()), "js", events_enabled=events_on(args[0] if args else "")))
-    for m in PROVIDER_RE.finditer(src):
-        tag_end = src.find(">", m.end())
+        facts.calls.append(Call("init", rel, line_of(src, m.start()), "js", events_enabled=events_on(args[0] if args else "", js)))
+    for m in PROVIDER_RE.finditer(code):
+        tag_end = code.find(">", m.end())
         tag = src[m.end():tag_end if tag_end != -1 else len(src)]
-        facts.calls.append(Call("init", rel, line_of(src, m.start()), "js", events_enabled=events_on(tag)))
+        options = re.search(r"options=\{\s*([\w$.]+)\s*\}", tag)
+        enabled = events_on(tag, js) if "enableEvents" in tag else events_on(options.group(1), js) if options else None
+        facts.calls.append(Call("init", rel, line_of(src, m.start()), "js", events_enabled=enabled))
 
     if not facts.calls:
         return None
@@ -266,6 +307,11 @@ def scan_js(raw: str, rel: str) -> FileFacts | None:
 
 
 def browser_identity(js: JsFile, src: str, line: int, identifies: list) -> Ident:
+    i = _browser_identity(js, src, line, identifies)
+    return Ident(i.status, i.reason, frozenset(f"browser:{x}" for x in i.sources) or frozenset({"browser:?"}))
+
+
+def _browser_identity(js: JsFile, src: str, line: int, identifies: list) -> Ident:
     before = [ident for at, ident in identifies if at <= line]
     if before:
         return before[-1]
@@ -277,6 +323,15 @@ def browser_identity(js: JsFile, src: str, line: int, identifies: list) -> Ident
     return Ident(UNKNOWN, "no identify() in this file: check the user is identified before the flag is read", frozenset({"browser-identity"}))
 
 
-def events_on(text: str) -> bool:
-    m = re.search(r"enableEvents\s*(?::|=)\s*\{?\s*([\w$.]+)", text or "")
-    return bool(m) and m.group(1) != "false"
+def events_on(text: str, js: JsFile, depth: int = 0) -> bool | None:
+    # None means the options come from somewhere we can't see (a variable from another file, a spread).
+    text = (text or "").strip()
+    m = re.search(r"enableEvents\s*(?::|=)\s*\{?\s*([\w$.]+)", text)
+    if m:
+        return m.group(1) != "false"
+    if re.fullmatch(r"[\w$.]+", text):
+        values = js.assignments(text) if depth < 3 else []
+        return events_on(values[0], js, depth + 1) if values else None
+    if "..." in text:
+        return None
+    return False

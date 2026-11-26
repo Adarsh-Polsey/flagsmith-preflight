@@ -184,7 +184,11 @@ def classify_name(expr: ast.Name, scope: Scope, depth: int) -> Ident:
     found = scope.lookup(expr.id)
     if found and found[0] == "assign":
         values = [v for v in found[1] if not uses_name(v, expr.id)] or found[1]
-        return any_of([classify(v, found[2], depth + 1) for v in values])
+        result = any_of([classify(v, found[2], depth + 1) for v in values])
+        if result.status == RANDOM:
+            # The same variable in the same scope holds one value, so calls that share it do join.
+            return Ident(RANDOM, result.reason, result.sources | {f"var:{id(found[2])}:{expr.id}"})
+        return result
     kind = hint(expr.id)
     if kind == STABLE:
         return Ident(STABLE, f"'{expr.id}' names a user or session id", frozenset({f"name:{expr.id}"}))
@@ -306,8 +310,15 @@ def scan_python(source: str, rel: str) -> FileFacts | None:
             ident = classify(arg(call, 1, "identifier"), scope)
             facts.calls.append(Call("conversion", rel, call.lineno, "python", event=event, ident=ident))
         elif name == "Flagsmith" and (uses_sdk or isinstance(call.func, ast.Attribute)):
-            enabled = next((k.value for k in call.keywords if k.arg == "enable_events"), None)
-            on = enabled is not None and not (isinstance(enabled, ast.Constant) and not enabled.value)
+            kwargs = {k.arg: k.value for k in call.keywords}
+            offline = kwargs.get("offline_mode")
+            if isinstance(offline, ast.Constant) and offline.value:
+                return  # an offline client reads a local snapshot and never sends events
+            enabled = kwargs.get("enable_events")
+            if enabled is not None:
+                on = not (isinstance(enabled, ast.Constant) and not enabled.value)
+            else:
+                on = None if None in kwargs else False  # **kwargs may carry enable_events
             facts.calls.append(Call("init", rel, call.lineno, "python", events_enabled=on))
             if buffer_of_one(call):
                 facts.flushes = True
