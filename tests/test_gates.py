@@ -130,3 +130,14 @@ def test_archive_after_cleanup(app, monkeypatch):
     answer(monkeypatch, "y")
     assert cli.main(["archive"]) == 0
     assert admin.calls == [("archive", "signup_cta")]
+
+
+def test_ship_reports_a_winner_that_isnt_served(app, monkeypatch, capsys):
+    admin = use(monkeypatch, running({"lift": 0.4, "ci_low": 0.1, "ci_high": 0.7, "chance_to_win": 0.99}))
+    admin.evaluate = lambda flag, identity: {"value": "Join the waitlist"}
+    clock = iter(range(0, 10_000, 10))
+    monkeypatch.setattr(cli.time, "time", lambda: next(clock))
+    monkeypatch.setattr(cli.time, "sleep", lambda s: None)
+    answer(monkeypatch, "y")
+    assert cli.main(["ship"]) == 1
+    assert "✗ only 0/5" in capsys.readouterr().out
