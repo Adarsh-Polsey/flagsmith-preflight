@@ -144,7 +144,7 @@ Every change asks first. In a terminal the CLI prompts `[y/N]`; in Claude Code t
 
 ## How the demo video was made
 
-The agent ran as real `claude -p` turns in `demo/`, with a narrow tool allowlist (read, edit, and `preflight` / `flagsmith` / `git diff` commands). The human's replies in the video ("yes") were typed by the recording script. Agent scenes replay that recorded session at reading speed; terminal scenes are live recordings of the commands against Flagsmith Cloud; dashboard shots are screenshots taken during the run.
+The run itself is real: the agent ran as `claude -p` turns in `demo/` against Flagsmith Cloud, with a narrow tool allowlist (read, edit, and `preflight` / `flagsmith` / `git diff` commands). The video re-renders that run's actual output, numbers and dashboard screenshots as motion graphics (Remotion), so terminal text stays sharp at 1080p; long lines are shortened in places. Traffic in the readout scenes is simulated and labelled so. Narration is my own voice. Music: "Minimal Emotion" from Mixkit (Mixkit Stock Music Free License).
 
 ## Environment variables
 
