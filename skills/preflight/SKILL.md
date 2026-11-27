@@ -1,6 +1,7 @@
 ---
 name: preflight
 description: Take a Flagsmith experiment from a one-line idea to production with a human yes before every change. Use when someone asks to A/B test, experiment on, or split-test something with Flagsmith, to check an experiment's wiring, to read or call an experiment's result, to ship a winner, or to clean up a finished experiment. Drives the `preflight` CLI.
+license: MIT
 compatibility: Needs the Flagsmith CLI v2 (logged in with `flagsmith login`), Python 3.10+ with `pip install git+https://github.com/Adarsh-Polsey/flagsmith-preflight`, and network access to Flagsmith.
 metadata:
   version: "1.0"
