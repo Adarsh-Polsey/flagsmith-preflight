@@ -137,7 +137,7 @@ The demo app uses the Python SDK: `Flagsmith(environment_key=..., enable_events=
 Every change asks first. In a terminal the CLI prompts `[y/N]`; in Claude Code the agent asks in chat and passes the reply as `--yes --note "<their words>"` (`--yes` without a note is refused). Both land in `.preflight/approvals.jsonl`, declines included:
 
 ```json
-{"at": "2026-11-26T08:54:19+05:30", "who": "Adarsh", "stage": "fix", "action": "stable identifier: use the session cookie as the visitor id in app.py, set it once with a 1-year max_age", "answer": "y", "via": "chat", "note": "yes"}
+{"at": "2026-11-26T08:54:19+05:30", "who": "Adarsh-Polsey", "stage": "fix", "action": "stable identifier: use the session cookie as the visitor id in app.py, set it once with a 1-year max_age", "answer": "y", "via": "chat", "note": "yes"}
 ```
 
 `preflight approvals` prints it as a table. The demo run's log is in [docs/demo-approvals.jsonl](docs/demo-approvals.jsonl).
