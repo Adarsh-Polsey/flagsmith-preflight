@@ -144,7 +144,7 @@ Every change asks first. In a terminal the CLI prompts `[y/N]`; in Claude Code t
 
 ## How the demo video was made
 
-The run itself is real: the agent ran as `claude -p` turns in `demo/` against Flagsmith Cloud, with a narrow tool allowlist (read, edit, and `preflight` / `flagsmith` / `git diff` commands). The video re-renders that run's actual output, numbers and dashboard screenshots as motion graphics (Remotion), so terminal text stays sharp at 1080p; long lines are shortened in places. Traffic in the readout scenes is simulated and labelled so. Narration is my own voice. Music: "Minimal Emotion" from Mixkit (Mixkit Stock Music Free License).
+The run itself is real: the agent ran as `claude -p` turns in `demo/` against Flagsmith Cloud, with a narrow tool allowlist (read, edit, and `preflight` / `flagsmith` / `git diff` commands). The video re-renders that run's actual output, numbers and dashboard screenshots as motion graphics (Remotion), so terminal text stays sharp at 1080p; long lines are shortened in places. Traffic in the readout scenes is simulated and labelled so. Narration: ElevenLabs text-to-speech, voice "Eric" (https://elevenlabs.io). Music: "Minimal Emotion" from Mixkit (Mixkit Stock Music Free License).
 
 ## Environment variables
 
