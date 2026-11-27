@@ -1,5 +1,6 @@
 import getpass
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime
@@ -9,6 +10,8 @@ from .state import DIR
 
 
 def who() -> str:
+    if os.environ.get("PREFLIGHT_USER"):
+        return os.environ["PREFLIGHT_USER"]
     try:
         name = subprocess.run(["git", "config", "user.name"], capture_output=True, text=True).stdout.strip()
     except OSError:

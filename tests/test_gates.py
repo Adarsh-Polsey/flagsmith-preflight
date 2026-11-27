@@ -149,3 +149,9 @@ def test_code_only_check_needs_no_flagsmith(app, monkeypatch, capsys):
     assert cli.main(["check", "--code-only", "--event", "signup"]) == 1
     out = capsys.readouterr().out
     assert "did you mean 'signup'" in out and "Setup" not in out
+
+
+def test_approvals_use_display_name(monkeypatch):
+    from preflight import approvals
+    monkeypatch.setenv("PREFLIGHT_USER", "Adarsh")
+    assert approvals.who() == "Adarsh"
