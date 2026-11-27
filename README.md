@@ -56,7 +56,7 @@ brew install Flagsmith/tap/flagsmith && flagsmith login
 pip install git+https://github.com/Adarsh-Polsey/flagsmith-preflight
 ```
 
-For the agent, copy `.claude/skills/preflight/` into your app's `.claude/skills/` (or `~/.claude/skills/`) and type `/preflight` in Claude Code.
+For the agent, copy `skills/preflight/` into your app's `.claude/skills/` (or `~/.claude/skills/`) and type `/preflight` in Claude Code. It follows the [Agent Skills spec](https://agentskills.io/specification), so other agents that load skills can use the same folder.
 
 ## Quickstart (2 minutes, on the demo app)
 
@@ -175,7 +175,7 @@ No keys live in the repo: `flagsmith.json`, `.env` and keys are gitignored, and 
 
 ```
 preflight/      the CLI: checks (pycode.py, jscode.py, deps.py, setup_checks.py), gates (cli.py), readout.py
-.claude/skills/preflight/SKILL.md   the agent
+skills/preflight/SKILL.md           the agent (Agent Skills format; linked from .claude/skills/)
 tests/          pytest: a good and a bad snippet for every check, plus the gates
 demo/           signup app with four planted bugs, seed.sh, simulate.py (SIMULATED traffic)
 fieldscan/      the read-only field scan (aggregates only)
