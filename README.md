@@ -155,6 +155,7 @@ The agent ran as real `claude -p` turns in `demo/`, with a narrow tool allowlist
 | `FLAGSMITH_ENVIRONMENT_KEY` | demo app | The SDK key the app evaluates flags and sends events with. |
 | `PORT` | demo app | Default 5055. |
 | `NO_COLOR` | preflight | Plain output. |
+| `PREFLIGHT_USER` | preflight | Name written to the approvals log; otherwise `git config user.name`. |
 
 No keys live in the repo: `flagsmith.json`, `.env` and keys are gitignored, and admin calls use the CLI's keychain login.
 
